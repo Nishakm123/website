@@ -1,0 +1,77 @@
+version: '3.7'
+
+services:
+  postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: mydatabase
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:latest
+    volumes:
+      - redis_data:/data
+
+  minio:
+    image: minio/minio
+    environment:
+      MINIO_ACCESS_KEY: minio_access_key
+      MINIO_SECRET_KEY: minio_secret_key
+    ports:
+      - "9000:9000"
+    command: server /data
+
+  django:
+    build: ./django
+    volumes:
+      - ./django:/app
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - DEBUG=True
+      - DATABASE_URL=postgres://user:password@postgres/mydatabase
+
+  celery:
+    build: ./django
+    command: celery -A myproject worker --loglevel=info
+    depends_on:
+      - django
+
+  strapi:
+    image: strapi/strapi
+    ports:
+      - "1337:1337"
+    environment:
+      DATABASE_CLIENT: postgres
+      DATABASE_NAME: mydatabase
+      DATABASE_HOST: postgres
+      DATABASE_PORT: 5432
+      DATABASE_USERNAME: user
+      DATABASE_PASSWORD: password
+    depends_on:
+      - postgres
+
+  nextjs:
+    build: ./nextjs
+    ports:
+      - "3000:3000"
+    depends_on:
+      - django
+      - strapi
+
+  nginx:
+    image: nginx:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - nextjs
+
+volumes:
+  postgres_data:
+  redis_data:
